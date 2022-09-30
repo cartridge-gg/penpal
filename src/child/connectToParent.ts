@@ -106,7 +106,7 @@ export default <TCallSender extends object = CallSender>(
           if (callSender) {
             window.removeEventListener(NativeEventType.Message, handleMessage);
             stopConnectionTimeout();
-            resolve(callSender);
+            resolve(callSender, event.origin);
           }
         }
       };
