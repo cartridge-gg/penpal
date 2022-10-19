@@ -50,7 +50,7 @@ describe('communication between parent and child', () => {
     const connection = Penpal.connectToChild({
       iframe: createAndAddIframe(`${CHILD_SERVER}/default.html`),
       methods: {
-        add: (num1, num2) => {
+        add: () => (num1, num2) => {
           return num1 + num2;
         },
       },

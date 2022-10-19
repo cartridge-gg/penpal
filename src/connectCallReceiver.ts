@@ -100,7 +100,11 @@ export default (
     };
 
     new Promise((resolve) =>
-      resolve(serializedMethods[methodName].apply(serializedMethods, args))
+      resolve(
+        serializedMethods[methodName]
+          .call(serializedMethods, event.origin)
+          .apply(serializedMethods, args)
+      )
     ).then(
       createPromiseHandler(Resolution.Fulfilled),
       createPromiseHandler(Resolution.Rejected)

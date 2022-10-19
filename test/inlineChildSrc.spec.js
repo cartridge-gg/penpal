@@ -8,7 +8,7 @@ const htmlSrc = `
     <script type="text/javascript">
       Penpal.connectToParent({
         methods: {
-          multiply: function(num1, num2) {
+          multiply: (origin) => (num1, num2) => {
             return num1 * num2;
           }
         }
