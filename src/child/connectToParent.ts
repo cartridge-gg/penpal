@@ -41,11 +41,16 @@ type Options = {
   debug?: boolean;
 };
 
+type AsyncMethodReturnsWithOrigin<T> = AsyncMethodReturns<T> & {
+  origin: string;
+};
+
 type Connection<TCallSender extends object = CallSender> = {
   /**
    * A promise which will be resolved once a connection has been established.
+   * The resolved value includes both the methods and the actual origin of the parent.
    */
-  promise: Promise<AsyncMethodReturns<TCallSender>>;
+  promise: Promise<AsyncMethodReturnsWithOrigin<TCallSender>>;
   /**
    * A method that, when called, will disconnect any messaging channels.
    * You may call this even before a connection has been established.
@@ -80,50 +85,53 @@ export default <TCallSender extends object = CallSender>(
     window.parent.postMessage(synMessage, parentOriginForSyn);
   };
 
-  const promise: Promise<AsyncMethodReturns<TCallSender>> = new Promise(
-    (resolve, reject) => {
-      const stopConnectionTimeout = startConnectionTimeout(timeout, destroy);
-      const handleMessage = (event: MessageEvent) => {
-        // Under niche scenarios, we get into this function after
-        // the iframe has been removed from the DOM. In Edge, this
-        // results in "Object expected" errors being thrown when we
-        // try to access properties on window (global properties).
-        // For this reason, we try to access a global up front (clearTimeout)
-        // and if it fails we can assume the iframe has been removed
-        // and we ignore the message event.
-        if (!areGlobalsAccessible()) {
-          return;
+  const promise: Promise<AsyncMethodReturnsWithOrigin<
+    TCallSender
+  >> = new Promise((resolve, reject) => {
+    const stopConnectionTimeout = startConnectionTimeout(timeout, destroy);
+    const handleMessage = (event: MessageEvent) => {
+      // Under niche scenarios, we get into this function after
+      // the iframe has been removed from the DOM. In Edge, this
+      // results in "Object expected" errors being thrown when we
+      // try to access properties on window (global properties).
+      // For this reason, we try to access a global up front (clearTimeout)
+      // and if it fails we can assume the iframe has been removed
+      // and we ignore the message event.
+      if (!areGlobalsAccessible()) {
+        return;
+      }
+
+      if (event.source !== parent || !event.data) {
+        return;
+      }
+
+      if (event.data.penpal === MessageType.SynAck) {
+        const callSender = handleSynAckMessage(event) as AsyncMethodReturns<
+          TCallSender
+        >;
+        if (callSender) {
+          window.removeEventListener(NativeEventType.Message, handleMessage);
+          stopConnectionTimeout();
+          resolve({
+            ...callSender,
+            origin: event.origin,
+          });
         }
+      }
+    };
 
-        if (event.source !== parent || !event.data) {
-          return;
-        }
+    window.addEventListener(NativeEventType.Message, handleMessage);
 
-        if (event.data.penpal === MessageType.SynAck) {
-          const callSender = handleSynAckMessage(event) as AsyncMethodReturns<
-            TCallSender
-          >;
-          if (callSender) {
-            window.removeEventListener(NativeEventType.Message, handleMessage);
-            stopConnectionTimeout();
-            resolve(callSender);
-          }
-        }
-      };
+    sendSynMessage();
 
-      window.addEventListener(NativeEventType.Message, handleMessage);
+    onDestroy((error?: PenpalError) => {
+      window.removeEventListener(NativeEventType.Message, handleMessage);
 
-      sendSynMessage();
-
-      onDestroy((error?: PenpalError) => {
-        window.removeEventListener(NativeEventType.Message, handleMessage);
-
-        if (error) {
-          reject(error);
-        }
-      });
-    }
-  );
+      if (error) {
+        reject(error);
+      }
+    });
+  });
 
   return {
     promise,
